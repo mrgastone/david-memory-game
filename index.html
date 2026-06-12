@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="David Memory">
+<title>David Memory Game</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body {
+    height:100%; overflow:hidden;
+    font-family:-apple-system, "Segoe UI", "Comic Sans MS", sans-serif;
+    user-select:none; -webkit-user-select:none;
+    touch-action:manipulation;
+    background:linear-gradient(160deg,#7b5cf0 0%,#5a8df5 45%,#4fc3f7 100%);
+    position:fixed; width:100%;
+  }
+
+  /* ============ SCHERMATA INIZIALE ============ */
+  #title-screen {
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:4vmin; z-index:50;
+    transition:opacity .5s, transform .5s;
+  }
+  #title-screen.hidden { opacity:0; transform:scale(1.2); pointer-events:none; }
+  .title-word { display:flex; }
+  .title-letter {
+    font-size:9vmin; font-weight:900; color:#fff;
+    text-shadow:0 4px 0 rgba(0,0,0,.18), 0 8px 18px rgba(0,0,0,.25);
+    animation:bounce 1.6s ease-in-out infinite;
+  }
+  @keyframes bounce {
+    0%,100% { transform:translateY(0) rotate(-3deg); }
+    50%     { transform:translateY(-2.2vmin) rotate(3deg); }
+  }
+  #play-btn {
+    width:24vmin; height:24vmin; border-radius:50%; border:none; cursor:pointer;
+    background:radial-gradient(circle at 35% 30%, #ffe35c, #ffb300);
+    box-shadow:0 10px 0 #d98e00, 0 16px 30px rgba(0,0,0,.3);
+    display:flex; align-items:center; justify-content:center;
+    animation:pulse 1.4s ease-in-out infinite;
+  }
+  #play-btn:active { transform:translateY(6px); box-shadow:0 4px 0 #d98e00; }
+  @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+  #play-btn svg { width:45%; height:45%; margin-left:8%; }
+  .title-sub { color:#fff; font-size:3.4vmin; opacity:.9; font-weight:700; }
+
+  /* ============ GIOCO ============ */
+  #game-screen { position:absolute; inset:0; display:flex; flex-direction:column; padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  #topbar {
+    display:flex; align-items:center; justify-content:center; gap:2vmin;
+    padding:1.6vmin; min-height:8vmin;
+  }
+  .level-star { width:5.5vmin; height:5.5vmin; transition:transform .4s; }
+  .level-star.earned { animation:starPop .6s ease; }
+  @keyframes starPop { 0%{transform:scale(0) rotate(-180deg)} 70%{transform:scale(1.5)} 100%{transform:scale(1)} }
+
+  #board-wrap { flex:1; min-height:0; min-width:0; overflow:hidden; display:flex; align-items:center; justify-content:center; padding:1vmin; position:relative; }
+  #board { display:grid; gap:var(--gap,12px); }
+
+  .card {
+    width:var(--card-size); height:var(--card-size);
+    perspective:900px; cursor:pointer; position:relative;
+  }
+  .card-inner {
+    width:100%; height:100%; position:relative;
+    transform-style:preserve-3d; transition:transform .45s cubic-bezier(.4,1.4,.6,1);
+  }
+  .card.flipped .card-inner { transform:rotateY(180deg); }
+  .card-face {
+    position:absolute; inset:0; backface-visibility:hidden; -webkit-backface-visibility:hidden;
+    border-radius:14%; overflow:hidden;
+    box-shadow:0 5px 12px rgba(0,0,0,.28);
+  }
+  .card-back {
+    background:linear-gradient(140deg,#ff8a5c,#ff5c8a 55%,#c95cff);
+    display:flex; align-items:center; justify-content:center;
+    border:0.6vmin solid #fff;
+  }
+  .card-back svg { width:62%; height:62%; }
+  .card-front {
+    transform:rotateY(180deg); background:#fff;
+    border:0.6vmin solid #ffd54a;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .card-front svg, .card-front img { width:100%; height:100%; object-fit:cover; display:block; }
+  .card.matched { pointer-events:none; }
+  .card.matched .card-inner { animation:matchedJiggle .7s ease .1s; }
+  .card.matched .card-front { border-color:#6fe06f; box-shadow:0 0 4vmin #8aff8a; }
+  @keyframes matchedJiggle {
+    0%{transform:rotateY(180deg) scale(1)} 30%{transform:rotateY(180deg) scale(1.15) rotate(4deg)}
+    60%{transform:rotateY(180deg) scale(1.1) rotate(-4deg)} 100%{transform:rotateY(180deg) scale(1)}
+  }
+  #board.locked .card { pointer-events:none; }
+
+  #msg {
+    text-align:center; color:#fff; font-size:4vmin; font-weight:800; min-height:6vmin;
+    text-shadow:0 2px 6px rgba(0,0,0,.3); padding-bottom:1vmin;
+  }
+
+  /* ============ FESTA ============ */
+  #celebrate {
+    position:absolute; inset:0; z-index:60; display:none;
+    flex-direction:column; align-items:center; justify-content:center; gap:3vmin;
+    background:rgba(40,20,90,.45); backdrop-filter:blur(3px);
+  }
+  #celebrate.show { display:flex; }
+  #celebrate h2 {
+    font-size:11vmin; color:#ffe35c; font-weight:900;
+    text-shadow:0 5px 0 #d98e00, 0 10px 24px rgba(0,0,0,.4);
+    animation:pulse 1s ease-in-out infinite;
+  }
+  #celebrate .big-stars { font-size:8vmin; letter-spacing:1.5vmin; animation:bounce 1.4s infinite; }
+  #next-btn {
+    border:none; cursor:pointer; border-radius:6vmin; padding:2.6vmin 6vmin;
+    font-size:5vmin; font-weight:900; color:#5a3500;
+    background:radial-gradient(circle at 35% 30%, #ffe35c, #ffb300);
+    box-shadow:0 8px 0 #d98e00, 0 14px 26px rgba(0,0,0,.35);
+    animation:pulse 1.3s ease-in-out infinite;
+    font-family:inherit;
+  }
+  #next-btn:active { transform:translateY(5px); box-shadow:0 3px 0 #d98e00; }
+
+  #confetti-canvas { position:absolute; inset:0; z-index:70; pointer-events:none; }
+
+  /* ============ PULSANTE GENITORI ============ */
+  #parent-btn {
+    position:absolute; left:1.6vmin; bottom:1.6vmin; z-index:55;
+    width:9vmin; height:9vmin; border-radius:50%; border:none;
+    background:rgba(255,255,255,.18); cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #parent-btn svg { width:55%; height:55%; opacity:.75; }
+  #parent-ring {
+    position:absolute; inset:-4px; border-radius:50%;
+    background:conic-gradient(#ffe35c var(--p,0%), transparent 0);
+    -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+            mask:radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+  }
+
+  /* ============ PANNELLO GENITORI ============ */
+  #parent-panel {
+    position:absolute; inset:0; z-index:80; display:none; flex-direction:column;
+    background:#f4f1fb; color:#333; overflow:hidden;
+  }
+  #parent-panel.show { display:flex; }
+  #parent-panel header {
+    background:#5a3df0; color:#fff; padding:14px 16px; display:flex;
+    align-items:center; justify-content:space-between; flex-shrink:0;
+  }
+  #parent-panel header h2 { font-size:19px; }
+  #close-panel {
+    border:none; background:rgba(255,255,255,.2); color:#fff; font-size:17px;
+    border-radius:10px; padding:8px 16px; cursor:pointer; font-weight:700; font-family:inherit;
+  }
+  #panel-body { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:14px; }
+  .panel-section {
+    background:#fff; border-radius:14px; padding:14px; margin-bottom:14px;
+    box-shadow:0 2px 8px rgba(0,0,0,.07);
+  }
+  .panel-section h3 { font-size:15px; color:#5a3df0; margin-bottom:10px; }
+  .settings-row { display:flex; align-items:center; justify-content:space-between; padding:7px 0; font-size:15px; gap:10px; flex-wrap:wrap; }
+  .settings-row input[type=text] {
+    font-size:16px; padding:8px 10px; border-radius:8px; border:1.5px solid #c9bff2; flex:1; min-width:120px;
+    font-family:inherit;
+  }
+  .settings-row input[type=checkbox] { width:22px; height:22px; accent-color:#5a3df0; }
+  .settings-row select {
+    font-size:14px; padding:8px 10px; border-radius:8px; border:1.5px solid #c9bff2;
+    background:#fff; color:#333; flex:1; min-width:140px; max-width:280px; font-family:inherit;
+  }
+  .card-row {
+    display:flex; align-items:center; gap:10px; padding:9px 0;
+    border-bottom:1px solid #eee; flex-wrap:wrap;
+  }
+  .card-row:last-child { border-bottom:none; }
+  .card-thumb {
+    width:54px; height:54px; border-radius:10px; overflow:hidden; flex-shrink:0;
+    border:2px solid #c9bff2; background:#fff;
+  }
+  .card-thumb svg, .card-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+  .card-row .name-input {
+    flex:1; min-width:110px; font-size:14px; padding:7px 9px;
+    border-radius:8px; border:1.5px solid #ddd; font-family:inherit;
+  }
+  .mini-btn {
+    border:none; border-radius:9px; padding:8px 11px; font-size:13px; cursor:pointer;
+    background:#e8e2fb; color:#4a2fd0; font-weight:700; font-family:inherit; white-space:nowrap;
+  }
+  .mini-btn.rec { background:#ffe0e0; color:#c0392b; }
+  .mini-btn.rec.recording { background:#c0392b; color:#fff; animation:pulse 1s infinite; }
+  .mini-btn.danger { background:#ffd6d6; color:#b03030; }
+  .mini-btn.primary { background:#5a3df0; color:#fff; font-size:15px; padding:11px 16px; }
+  .has-audio { font-size:12px; color:#2e9e44; font-weight:700; }
+  .row-toggle { width:22px; height:22px; accent-color:#5a3df0; flex-shrink:0; }
+  .hint { font-size:12.5px; color:#888; margin-top:6px; line-height:1.45; }
+  #panel-toast {
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+    background:#333; color:#fff; padding:10px 20px; border-radius:20px;
+    font-size:14px; opacity:0; transition:opacity .3s; pointer-events:none; z-index:90;
+  }
+  #panel-toast.show { opacity:1; }
+</style>
+</head>
+<body>
+
+<!-- ============ SCHERMATA INIZIALE ============ -->
+<div id="title-screen">
+  <div class="title-word" id="title-name"></div>
+  <div class="title-word" id="title-rest"></div>
+  <button id="play-btn" aria-label="Gioca">
+    <svg viewBox="0 0 100 100"><polygon points="20,10 90,50 20,90" fill="#fff"/></svg>
+  </button>
+  <div class="title-sub">Tocca per giocare!</div>
+</div>
+
+<!-- ============ GIOCO ============ -->
+<div id="game-screen">
+  <div id="topbar"></div>
+  <div id="board-wrap"><div id="board"></div></div>
+  <div id="msg"></div>
+</div>
+
+<!-- ============ FESTA ============ -->
+<div id="celebrate">
+  <div class="big-stars">⭐🌟⭐</div>
+  <h2 id="celebrate-title">EVVIVA!</h2>
+  <button id="next-btn">Avanti! ➜</button>
+</div>
+
+<canvas id="confetti-canvas"></canvas>
+
+<!-- ============ GENITORI ============ -->
+<button id="parent-btn" aria-label="Per i genitori (tieni premuto)">
+  <div id="parent-ring"></div>
+  <svg viewBox="0 0 24 24" fill="#fff"><path d="M12 17a2 2 0 0 0 2-2 2 2 0 0 0-2-2 2 2 0 0 0-2 2 2 2 0 0 0 2 2m6-9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2h1V6a5 5 0 0 1 5-5 5 5 0 0 1 5 5v2h1m-6-5a3 3 0 0 0-3 3v2h6V6a3 3 0 0 0-3-3z"/></svg>
+</button>
+
+<div id="parent-panel">
+  <header>
+    <h2>👨‍👩‍👦 Pannello Genitori</h2>
+    <button id="close-panel">✕ Chiudi</button>
+  </header>
+  <div id="panel-body">
+    <div class="panel-section">
+      <h3>⚙️ Impostazioni</h3>
+      <div class="settings-row">
+        <span>Nome del bambino</span>
+        <input type="text" id="set-name" maxlength="20">
+      </div>
+      <div class="settings-row">
+        <span>Voce italiana (es. "Bravo!")</span>
+        <input type="checkbox" id="set-voice">
+      </div>
+      <div class="settings-row">
+        <span>Quale voce</span>
+        <select id="set-voiceSel"></select>
+        <button class="mini-btn" id="test-voice">🔊 Prova</button>
+      </div>
+      <p class="hint">Per una voce più naturale su iPad: <b>Impostazioni → Accessibilità → Contenuto letto → Voci → Italiano</b> e scarica una voce <b>Premium</b> o <b>Migliorata</b> (es. Alice o una voce di Siri). Dopo il download apparirà in questo elenco e il gioco la userà.</p>
+      <div class="settings-row">
+        <span>Mostra le carte all'inizio del livello (aiuto memoria)</span>
+        <input type="checkbox" id="set-preview">
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <h3>🖼️ Carte del gioco</h3>
+      <p class="hint">Per ogni carta puoi: cambiare la <b>foto</b> (dal rullino), registrare o caricare un <b>suono</b> (es. la vostra voce!), cambiare il <b>nome</b> che viene pronunciato, o spegnerla con l'interruttore. Servono almeno 6 carte accese.</p>
+      <div id="card-list"></div>
+      <button class="mini-btn primary" id="add-card" style="margin-top:10px">➕ Aggiungi una carta nuova (foto di famiglia!)</button>
+    </div>
+
+    <div class="panel-section">
+      <h3>💾 Backup</h3>
+      <p class="hint">Le foto e i suoni sono salvati solo su questo dispositivo. Esporta un backup per non perderli (ad es. se cancelli i dati di Safari) e per ripristinarli su un altro dispositivo.</p>
+      <div class="settings-row" style="justify-content:flex-start">
+        <button class="mini-btn primary" id="export-btn">⬇️ Esporta backup</button>
+        <button class="mini-btn primary" id="import-btn">⬆️ Importa backup</button>
+        <button class="mini-btn danger" id="reset-btn">🗑️ Ripristina tutto</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="panel-toast"></div>
+
+<script>
+'use strict';
+
+/* ==================================================================
+   CARTE PREDEFINITE (disegni SVG)
+   ================================================================== */
+const SVGS = {
+  emirates: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" fill="#aee3ff"/>
+    <circle cx="82" cy="16" r="9" fill="#ffd93b"/>
+    <ellipse cx="20" cy="22" rx="13" ry="5" fill="#fff" opacity=".95"/>
+    <ellipse cx="62" cy="84" rx="16" ry="5.5" fill="#fff" opacity=".8"/>
+    <path d="M64 47 L74 24 L84 24 L76 47 Z" fill="#e2231a"/>
+    <path d="M8 53 Q10 44 24 44 L72 44 Q88 44 92 51 Q88 59 72 59 L24 59 Q10 59 8 53 Z" fill="#ffffff" stroke="#c8d4de" stroke-width="1.5"/>
+    <path d="M84 47 Q90 48 92 51 Q90 54 84 55 Z" fill="#3b556b"/>
+    <path d="M42 50 L24 70 L36 70 L54 53 Z" fill="#cfd8e3" stroke="#b7c3cf" stroke-width="1"/>
+    <ellipse cx="34" cy="66" rx="6" ry="3.5" fill="#e2231a"/>
+    <circle cx="27" cy="50" r="2.1" fill="#4aa3df"/><circle cx="34" cy="50" r="2.1" fill="#4aa3df"/>
+    <circle cx="41" cy="50" r="2.1" fill="#4aa3df"/><circle cx="48" cy="50" r="2.1" fill="#4aa3df"/>
+    <circle cx="55" cy="50" r="2.1" fill="#4aa3df"/><circle cx="62" cy="50" r="2.1" fill="#4aa3df"/>
+    <path d="M14 50 L24 47 L24 56 L14 54 Z" fill="#e2231a"/>
+  </svg>`,
+  etihad: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" fill="#ffe9c7"/>
+    <circle cx="18" cy="16" r="9" fill="#ff9b3b"/>
+    <ellipse cx="74" cy="20" rx="14" ry="5" fill="#fff" opacity=".95"/>
+    <ellipse cx="34" cy="84" rx="16" ry="5.5" fill="#fff" opacity=".8"/>
+    <path d="M64 47 L74 24 L84 24 L76 47 Z" fill="#b78a2e"/>
+    <path d="M8 53 Q10 44 24 44 L72 44 Q88 44 92 51 Q88 59 72 59 L24 59 Q10 59 8 53 Z" fill="#fffdf8" stroke="#d8c9a8" stroke-width="1.5"/>
+    <path d="M84 47 Q90 48 92 51 Q90 54 84 55 Z" fill="#5b4a2e"/>
+    <path d="M42 50 L24 70 L36 70 L54 53 Z" fill="#e8dcc0" stroke="#cdbd96" stroke-width="1"/>
+    <ellipse cx="34" cy="66" rx="6" ry="3.5" fill="#b78a2e"/>
+    <circle cx="27" cy="50" r="2.1" fill="#7a6a45"/><circle cx="34" cy="50" r="2.1" fill="#7a6a45"/>
+    <circle cx="41" cy="50" r="2.1" fill="#7a6a45"/><circle cx="48" cy="50" r="2.1" fill="#7a6a45"/>
+    <circle cx="55" cy="50" r="2.1" fill="#7a6a45"/><circle cx="62" cy="50" r="2.1" fill="#7a6a45"/>
+    <path d="M14 50 L24 47 L24 56 L14 54 Z" fill="#d4a843"/>
+  </svg>`,
+  abudhabi: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" fill="#bfe6ff"/>
+    <circle cx="16" cy="16" r="8" fill="#ffd93b"/>
+    <rect x="0" y="78" width="100" height="22" fill="#f3dca6"/>
+    <rect x="12" y="42" width="6" height="38" fill="#fff" stroke="#d8d2c2" stroke-width="1"/>
+    <circle cx="15" cy="40" r="4" fill="#fff" stroke="#d8d2c2" stroke-width="1"/>
+    <path d="M15 33 L15 37" stroke="#e8b53a" stroke-width="2" stroke-linecap="round"/>
+    <rect x="82" y="42" width="6" height="38" fill="#fff" stroke="#d8d2c2" stroke-width="1"/>
+    <circle cx="85" cy="40" r="4" fill="#fff" stroke="#d8d2c2" stroke-width="1"/>
+    <path d="M85 33 L85 37" stroke="#e8b53a" stroke-width="2" stroke-linecap="round"/>
+    <path d="M30 62 Q30 44 50 42 Q70 44 70 62 Z" fill="#fff" stroke="#d8d2c2" stroke-width="1.5"/>
+    <circle cx="50" cy="41" r="2.5" fill="#e8b53a"/>
+    <path d="M24 80 L24 66 Q24 56 33 56 Q40 56 40 66 L40 80 Z" fill="#fff" stroke="#d8d2c2" stroke-width="1.2"/>
+    <path d="M60 80 L60 66 Q60 56 68 56 Q76 56 76 66 L76 80 Z" fill="#fff" stroke="#d8d2c2" stroke-width="1.2"/>
+    <rect x="22" y="62" width="56" height="18" fill="#fff" stroke="#d8d2c2" stroke-width="1.5"/>
+    <path d="M44 80 L44 70 Q44 63 50 63 Q56 63 56 70 L56 80 Z" fill="#8a6d3b"/>
+    <rect x="28" y="67" width="6" height="9" rx="3" fill="#bfe6ff"/>
+    <rect x="66" y="67" width="6" height="9" rx="3" fill="#bfe6ff"/>
+  </svg>`,
+  dubai: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" fill="#ffd9a0"/>
+    <circle cx="80" cy="22" r="10" fill="#ff8a3b"/>
+    <rect x="0" y="84" width="100" height="16" fill="#4fc3f7"/>
+    <rect x="14" y="56" width="13" height="28" fill="#7fa8c9"/>
+    <rect x="16" y="59" width="3" height="4" fill="#fff"/><rect x="22" y="59" width="3" height="4" fill="#fff"/>
+    <rect x="16" y="66" width="3" height="4" fill="#fff"/><rect x="22" y="66" width="3" height="4" fill="#fff"/>
+    <rect x="16" y="73" width="3" height="4" fill="#fff"/><rect x="22" y="73" width="3" height="4" fill="#fff"/>
+    <rect x="70" y="50" width="16" height="34" fill="#9bbbd6"/>
+    <rect x="73" y="54" width="4" height="5" fill="#fff"/><rect x="80" y="54" width="4" height="5" fill="#fff"/>
+    <rect x="73" y="62" width="4" height="5" fill="#fff"/><rect x="80" y="62" width="4" height="5" fill="#fff"/>
+    <rect x="73" y="70" width="4" height="5" fill="#fff"/><rect x="80" y="70" width="4" height="5" fill="#fff"/>
+    <path d="M50 6 L52.5 26 L55 38 L58 52 L61 84 L39 84 L42 52 L45 38 L47.5 26 Z" fill="#c9d6e3" stroke="#a8b9c9" stroke-width="1.2"/>
+    <path d="M50 6 L50 84" stroke="#a8b9c9" stroke-width="1.2"/>
+    <path d="M45 38 L55 38 M42 52 L58 52 M40.5 66 L59.5 66" stroke="#a8b9c9" stroke-width="1.2"/>
+    <ellipse cx="32" cy="88" rx="10" ry="2" fill="#fff" opacity=".6"/>
+    <ellipse cx="66" cy="92" rx="12" ry="2" fill="#fff" opacity=".6"/>
+  </svg>`,
+  spazio: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" fill="#0d1b4b"/>
+    <circle cx="14" cy="14" r="1.4" fill="#fff"/><circle cx="34" cy="8" r="1" fill="#fff"/>
+    <circle cx="58" cy="14" r="1.3" fill="#fff"/><circle cx="86" cy="10" r="1.5" fill="#fff"/>
+    <circle cx="92" cy="36" r="1" fill="#fff"/><circle cx="8" cy="42" r="1.2" fill="#fff"/>
+    <circle cx="80" cy="58" r="1.2" fill="#fff"/><circle cx="20" cy="70" r="1" fill="#fff"/>
+    <path d="M0 100 Q8 70 40 78 Q70 84 100 70 L100 100 Z" fill="#2e7fd9"/>
+    <path d="M12 92 Q22 84 36 88 Q30 96 16 97 Z" fill="#4caf50"/>
+    <path d="M62 84 Q74 80 86 84 Q78 92 64 91 Z" fill="#4caf50"/>
+    <rect x="12" y="38" width="20" height="12" rx="2" fill="#3b6fd4" stroke="#ffd93b" stroke-width="1.4"/>
+    <path d="M14 41 H30 M14 44 H30 M14 47 H30" stroke="#1d3f8a" stroke-width="1.4"/>
+    <rect x="68" y="38" width="20" height="12" rx="2" fill="#3b6fd4" stroke="#ffd93b" stroke-width="1.4"/>
+    <path d="M70 41 H86 M70 44 H86 M70 47 H86" stroke="#1d3f8a" stroke-width="1.4"/>
+    <rect x="32" y="42" width="36" height="4" fill="#c9d6e3"/>
+    <rect x="40" y="36" width="20" height="16" rx="5" fill="#e8eef4" stroke="#aab8c6" stroke-width="1.4"/>
+    <circle cx="46" cy="44" r="2.6" fill="#4fc3f7"/>
+    <circle cx="54" cy="44" r="2.6" fill="#4fc3f7"/>
+    <rect x="47" y="52" width="6" height="7" fill="#c9d6e3"/>
+    <path d="M50 28 L50 36 M46 30 L50 28 L54 30" stroke="#c9d6e3" stroke-width="1.6" fill="none"/>
+  </svg>`,
+  principessa: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" fill="#cdeefc"/>
+    <g stroke="#fff" stroke-width="1.6" stroke-linecap="round">
+      <path d="M16 14 v10 M11 19 h10 M12.5 15.5 l7 7 M19.5 15.5 l-7 7"/>
+      <path d="M84 22 v10 M79 27 h10 M80.5 23.5 l7 7 M87.5 23.5 l-7 7"/>
+      <path d="M78 66 v8 M74 70 h8"/>
+      <path d="M14 56 v8 M10 60 h8"/>
+    </g>
+    <path d="M50 56 L30 92 L70 92 Z" fill="#7fd4f5" stroke="#52b8e8" stroke-width="1.5"/>
+    <path d="M44 66 l2.4 4 -2.4 4 -2.4 -4 Z" fill="#fff" opacity=".9"/>
+    <path d="M57 76 l2.2 3.6 -2.2 3.6 -2.2 -3.6 Z" fill="#fff" opacity=".9"/>
+    <ellipse cx="50" cy="55" rx="9" ry="5" fill="#a5e2f8"/>
+    <circle cx="50" cy="40" r="13" fill="#ffe2c9"/>
+    <path d="M37 38 Q36 24 50 24 Q64 24 63 38 Q57 30 50 31 Q43 30 37 38 Z" fill="#ffe9a8"/>
+    <path d="M62 36 Q70 42 68 58 Q66 66 61 70 Q64 58 60 48 Z" fill="#ffe9a8"/>
+    <circle cx="61" cy="52" r="2.6" fill="#ffe9a8"/>
+    <circle cx="62" cy="60" r="2.4" fill="#ffe9a8"/>
+    <circle cx="45.5" cy="39" r="1.8" fill="#3b3b50"/>
+    <circle cx="54.5" cy="39" r="1.8" fill="#3b3b50"/>
+    <path d="M46 46 Q50 49.5 54 46" stroke="#d4766a" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    <circle cx="42" cy="43.5" r="2" fill="#ffb6b6" opacity=".7"/>
+    <circle cx="58" cy="43.5" r="2" fill="#ffb6b6" opacity=".7"/>
+    <path d="M43 26 L46 20 L49 25 L52 19 L55 25 L58 21 L60 27" fill="none" stroke="#8fd9f2" stroke-width="2" stroke-linejoin="round"/>
+  </svg>`,
+  pompieri: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" fill="#fff3cd"/>
+    <circle cx="84" cy="14" r="8" fill="#ffd93b"/>
+    <rect x="0" y="80" width="100" height="20" fill="#9aa7b5"/>
+    <rect x="8" y="46" width="56" height="30" rx="4" fill="#e2231a"/>
+    <rect x="64" y="54" width="26" height="22" rx="3" fill="#e2231a"/>
+    <path d="M66 56 h14 v12 h-14 Z" fill="#bfe6ff" stroke="#b01510" stroke-width="1.5"/>
+    <rect x="12" y="40" width="46" height="7" rx="3" fill="#c9d6e3" stroke="#9aa7b5" stroke-width="1.4"/>
+    <rect x="16" y="42.5" width="38" height="2" fill="#9aa7b5"/>
+    <rect x="70" y="48" width="8" height="5" rx="2" fill="#ff9b3b"/>
+    <rect x="12" y="52" width="44" height="8" rx="2" fill="#fff"/>
+    <circle cx="24" cy="78" r="9" fill="#3b3b50"/><circle cx="24" cy="78" r="4" fill="#c9d6e3"/>
+    <circle cx="74" cy="78" r="9" fill="#3b3b50"/><circle cx="74" cy="78" r="4" fill="#c9d6e3"/>
+    <rect x="36" y="62" width="12" height="12" rx="2" fill="#ffd93b"/>
+    <path d="M42 64 Q39 68 42 70 Q45 68 42 64" fill="#e2231a"/>
+  </svg>`,
+  polizia: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" fill="#dceefb"/>
+    <circle cx="16" cy="16" r="8" fill="#ffd93b"/>
+    <rect x="0" y="78" width="100" height="22" fill="#9aa7b5"/>
+    <path d="M10 76 L10 62 Q10 56 18 56 L26 56 L36 44 Q38 42 42 42 L64 42 Q68 42 70 45 L78 56 Q90 58 90 66 L90 76 Z" fill="#fff" stroke="#b9c6d2" stroke-width="1.5"/>
+    <path d="M38 46 Q39 45 42 45 L52 45 L52 56 L31 56 Z" fill="#7fd4f5" stroke="#5a9bc4" stroke-width="1.2"/>
+    <path d="M56 45 L63 45 Q66 45 67 47 L73 56 L56 56 Z" fill="#7fd4f5" stroke="#5a9bc4" stroke-width="1.2"/>
+    <rect x="10" y="62" width="80" height="8" fill="#2356c9"/>
+    <rect x="42" y="34" width="16" height="7" rx="2" fill="#3b3b50"/>
+    <rect x="43.5" y="35.5" width="6" height="4" rx="1" fill="#ff4040"/>
+    <rect x="51" y="35.5" width="6" height="4" rx="1" fill="#4070ff"/>
+    <circle cx="26" cy="78" r="9" fill="#3b3b50"/><circle cx="26" cy="78" r="4" fill="#c9d6e3"/>
+    <circle cx="72" cy="78" r="9" fill="#3b3b50"/><circle cx="72" cy="78" r="4" fill="#c9d6e3"/>
+    <circle cx="50" cy="66" r="2.8" fill="#ffd93b"/>
+  </svg>`
+};
+
+const DEFAULT_CARDS = [
+  { id:'emirates',    name:'Aereo Emirates' },
+  { id:'etihad',      name:'Aereo Etihad' },
+  { id:'abudhabi',    name:'Abu Dhabi' },
+  { id:'dubai',       name:'Dubai' },
+  { id:'spazio',      name:'Stazione Spaziale' },
+  { id:'principessa', name:'Principessa del Ghiaccio' },
+  { id:'pompieri',    name:'Vigili del Fuoco' },
+  { id:'polizia',     name:'Polizia' },
+  { id:'foto-tennis',   name:'David al tennis',    img:'foto/tennis.jpg' },
+  { id:'foto-barbiere', name:'David dal barbiere', img:'foto/barbiere.jpg' },
+  { id:'foto-mamma',    name:'David e la mamma',   img:'foto/mamma.jpg' }
+];
+
+const CARD_BACK_SVG = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <path d="M50 8 L60 36 L90 36 L66 54 L75 84 L50 66 L25 84 L34 54 L10 36 L40 36 Z"
+        fill="#fff" stroke="#ffe35c" stroke-width="4" stroke-linejoin="round"/>
+  <circle cx="50" cy="48" r="6" fill="#ffd93b"/>
+</svg>`;
+
+/* ==================================================================
+   STATO E SALVATAGGIO (IndexedDB)
+   ================================================================== */
+const PAIRS_START = 2, PAIRS_MAX = 6, MIN_ENABLED = 6;
+let settings = { name:'David', voice:true, preview:true, voiceName:null, overrides:{}, custom:[] };
+/* overrides: { [id]: {name?, img?, audio?, enabled?} }
+   custom:    [ {id, name, img, audio?, enabled} ] */
+
+let db = null;
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('david-memory', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('data');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function loadSettings() {
+  try {
+    db = await openDB();
+    const val = await new Promise((res, rej) => {
+      const tx = db.transaction('data', 'readonly');
+      const rq = tx.objectStore('data').get('settings');
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    });
+    if (val) settings = Object.assign(settings, val);
+  } catch (e) { console.warn('IndexedDB non disponibile', e); }
+}
+function saveSettings() {
+  if (!db) return;
+  try {
+    const tx = db.transaction('data', 'readwrite');
+    tx.objectStore('data').put(JSON.parse(JSON.stringify(settings)), 'settings');
+  } catch (e) { console.warn('Salvataggio fallito', e); }
+}
+
+/* Pool delle carte effettive (default + override + personalizzate) */
+function cardPool() {
+  const base = DEFAULT_CARDS.map(c => {
+    const o = settings.overrides[c.id] || {};
+    return {
+      id: c.id,
+      name: o.name || c.name,
+      img: o.img || c.img || null,
+      svg: SVGS[c.id],
+      audio: o.audio || null,
+      enabled: o.enabled !== false
+    };
+  });
+  const customs = settings.custom.map(c => ({
+    id: c.id, name: c.name || 'Foto', img: c.img, svg: null,
+    audio: c.audio || null, enabled: c.enabled !== false
+  }));
+  return base.concat(customs);
+}
+function enabledCards() { return cardPool().filter(c => c.enabled); }
+
+/* ==================================================================
+   AUDIO (Web Audio + voce italiana)
+   ================================================================== */
+let actx = null;
+function audioCtx() {
+  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+function tone(freq, start, dur, type = 'sine', vol = 0.25) {
+  const ctx = audioCtx();
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(0, ctx.currentTime + start);
+  g.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+  o.connect(g).connect(ctx.destination);
+  o.start(ctx.currentTime + start); o.stop(ctx.currentTime + start + dur + 0.05);
+}
+function sndFlip()  { tone(520, 0, 0.09, 'triangle', 0.12); tone(700, 0.04, 0.08, 'triangle', 0.1); }
+function sndMatch() { [660, 880, 1100].forEach((f, i) => tone(f, i * 0.09, 0.22, 'sine', 0.22)); }
+function sndUnflip(){ tone(420, 0, 0.1, 'sine', 0.07); }
+function sndFanfare() {
+  const notes = [523, 659, 784, 1047, 784, 1047, 1319];
+  notes.forEach((f, i) => { tone(f, i * 0.14, 0.3, 'triangle', 0.2); tone(f / 2, i * 0.14, 0.3, 'sine', 0.1); });
+}
+function sndApplause(dur = 2.2) {
+  const ctx = audioCtx();
+  for (let i = 0; i < dur * 28; i++) {
+    const t = Math.random() * dur;
+    const buf = ctx.createBuffer(1, 600, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let j = 0; j < d.length; j++) d[j] = (Math.random() * 2 - 1) * Math.exp(-j / 150);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.value = 1200 + Math.random() * 2500; bp.Q.value = 1;
+    const g = ctx.createGain(); g.gain.value = 0.05 + Math.random() * 0.06;
+    src.connect(bp).connect(g).connect(ctx.destination);
+    src.start(ctx.currentTime + t);
+  }
+}
+
+let itVoice = null;
+function italianVoices() {
+  return speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('it'));
+}
+function voiceQuality(v) {
+  const n = v.name.toLowerCase();
+  let s = 0;
+  if (n.includes('siri')) s += 6;
+  if (n.includes('natural') || n.includes('naturale')) s += 5;
+  if (n.includes('premium')) s += 5;
+  if (n.includes('enhanced') || n.includes('migliorata')) s += 4;
+  if (n.includes('google')) s += 3;
+  if (/alice|federica|emma|elsa|isabella|diego|giuseppe/.test(n)) s += 2;
+  if (n.includes('compact') || n.includes('eloquence')) s -= 3;
+  return s;
+}
+function pickVoice() {
+  const vs = italianVoices();
+  if (settings.voiceName) {
+    const chosen = vs.find(v => v.name === settings.voiceName);
+    if (chosen) { itVoice = chosen; return; }
+  }
+  itVoice = vs.slice().sort((a, b) => voiceQuality(b) - voiceQuality(a))[0] || null;
+}
+if ('speechSynthesis' in window) {
+  pickVoice();
+  speechSynthesis.onvoiceschanged = pickVoice;
+}
+function speak(text) {
+  if (!settings.voice || !('speechSynthesis' in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'it-IT'; if (itVoice) u.voice = itVoice;
+  u.rate = 1.0; u.pitch = 1.05;
+  speechSynthesis.speak(u);
+}
+function playCardAudio(card) {
+  if (card.audio) {
+    try { new Audio(card.audio).play(); return true; } catch (e) {}
+  }
+  return false;
+}
+const PRAISES = ['Bravo', 'Bravissimo', 'Fantastico', 'Che bravo', 'Super', 'Grande'];
+function praise(card) {
+  const p = PRAISES[Math.floor(Math.random() * PRAISES.length)];
+  const withName = Math.random() < 0.5 ? `${p} ${settings.name}!` : `${p}!`;
+  if (playCardAudio(card)) {
+    setTimeout(() => speak(withName), 900);
+  } else {
+    speak(`${withName} ${card.name}!`);
+  }
+}
+
+/* ==================================================================
+   CORIANDOLI
+   ================================================================== */
+const confettiCanvas = document.getElementById('confetti-canvas');
+const cctx = confettiCanvas.getContext('2d');
+let confetti = [], confettiRunning = false;
+function resizeCanvas() {
+  confettiCanvas.width = innerWidth * devicePixelRatio;
+  confettiCanvas.height = innerHeight * devicePixelRatio;
+  cctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+}
+addEventListener('resize', resizeCanvas); resizeCanvas();
+function launchConfetti(n = 160) {
+  const colors = ['#ffd93b', '#ff5c8a', '#5cff8a', '#5cb8ff', '#c95cff', '#ff9b3b', '#fff'];
+  for (let i = 0; i < n; i++) {
+    confetti.push({
+      x: Math.random() * innerWidth, y: -20 - Math.random() * innerHeight * 0.5,
+      vx: (Math.random() - 0.5) * 3, vy: 2 + Math.random() * 3.5,
+      size: 6 + Math.random() * 8, color: colors[i % colors.length],
+      rot: Math.random() * Math.PI, vrot: (Math.random() - 0.5) * 0.25
+    });
+  }
+  if (!confettiRunning) { confettiRunning = true; requestAnimationFrame(confettiFrame); }
+}
+function confettiFrame() {
+  cctx.clearRect(0, 0, innerWidth, innerHeight);
+  confetti = confetti.filter(p => p.y < innerHeight + 30);
+  for (const p of confetti) {
+    p.x += p.vx + Math.sin(p.y * 0.02) * 1.2; p.y += p.vy; p.rot += p.vrot;
+    cctx.save(); cctx.translate(p.x, p.y); cctx.rotate(p.rot);
+    cctx.fillStyle = p.color;
+    cctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+    cctx.restore();
+  }
+  if (confetti.length) requestAnimationFrame(confettiFrame);
+  else { confettiRunning = false; cctx.clearRect(0, 0, innerWidth, innerHeight); }
+}
+
+/* ==================================================================
+   GIOCO
+   ================================================================== */
+const board = document.getElementById('board');
+const boardWrap = document.getElementById('board-wrap');
+const topbar = document.getElementById('topbar');
+const msg = document.getElementById('msg');
+const celebrateEl = document.getElementById('celebrate');
+const celebrateTitle = document.getElementById('celebrate-title');
+const nextBtn = document.getElementById('next-btn');
+
+let level = 0;                 // 0..4  →  coppie = PAIRS_START + level
+let firstCard = null, lock = true, matchedCount = 0, totalPairs = 0;
+
+function pairsForLevel(l) { return Math.min(PAIRS_START + l, PAIRS_MAX); }
+function maxLevel() { return PAIRS_MAX - PAIRS_START; } // 4 → 5 livelli (0..4)
+
+function renderStars() {
+  topbar.innerHTML = '';
+  for (let i = 0; i <= maxLevel(); i++) {
+    const earned = i < level;
+    const cur = i === level;
+    const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('viewBox', '0 0 24 24');
+    s.classList.add('level-star');
+    if (earned) s.classList.add('earned');
+    s.innerHTML = `<path d="M12 2 L14.8 8.6 L22 9.3 L16.6 14 L18.2 21 L12 17.3 L5.8 21 L7.4 14 L2 9.3 L9.2 8.6 Z"
+      fill="${earned ? '#ffd93b' : (cur ? 'rgba(255,217,59,.45)' : 'rgba(255,255,255,.3)')}"
+      stroke="#fff" stroke-width="1" stroke-linejoin="round"/>`;
+    topbar.appendChild(s);
+  }
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function layoutBoard(count) {
+  const w = boardWrap.clientWidth - 8, h = boardWrap.clientHeight - 8;
+  const gap = Math.max(8, Math.min(w, h) * 0.025);
+  let best = { size: 0, cols: 1 };
+  for (let cols = 1; cols <= count; cols++) {
+    const rows = Math.ceil(count / cols);
+    const size = Math.min((w - gap * (cols - 1)) / cols, (h - gap * (rows - 1)) / rows);
+    if (size > best.size) best = { size, cols };
+  }
+  board.style.setProperty('--gap', gap + 'px');
+  board.style.gridTemplateColumns = `repeat(${best.cols}, var(--card-size))`;
+  board.style.setProperty('--card-size', Math.floor(best.size) + 'px');
+}
+
+function startLevel() {
+  const pairs = pairsForLevel(level);
+  const pool = shuffle(enabledCards().slice());
+  // se per qualche motivo le carte attive sono meno delle coppie, riusa il pool
+  const chosen = [];
+  while (chosen.length < pairs) chosen.push(...pool.slice(0, pairs - chosen.length));
+  const deck = shuffle(chosen.flatMap(c => [c, c]).map((c, i) => ({ card: c, key: i })));
+
+  totalPairs = pairs; matchedCount = 0; firstCard = null; lock = true;
+  renderStars();
+  board.innerHTML = '';
+  board.classList.add('locked');
+
+  for (const item of deck) {
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.dataset.cardId = item.card.id;
+    const face = item.card.img
+      ? `<img src="${item.card.img}" alt="">`
+      : item.card.svg;
+    el.innerHTML = `
+      <div class="card-inner">
+        <div class="card-face card-back">${CARD_BACK_SVG}</div>
+        <div class="card-face card-front">${face}</div>
+      </div>`;
+    el.addEventListener('pointerdown', () => tapCard(el, item.card));
+    board.appendChild(el);
+  }
+  layoutBoard(deck.length);
+
+  if (settings.preview) {
+    msg.textContent = '👀 Guarda bene!';
+    speak('Guarda bene!');
+    setTimeout(() => {
+      board.querySelectorAll('.card').forEach(c => c.classList.add('flipped'));
+    }, 350);
+    setTimeout(() => {
+      board.querySelectorAll('.card').forEach(c => c.classList.remove('flipped'));
+      sndFlip();
+      setTimeout(() => { board.classList.remove('locked'); lock = false; msg.textContent = 'Trova le coppie!'; }, 500);
+    }, 350 + 2600 + pairs * 250);
+  } else {
+    msg.textContent = 'Trova le coppie!';
+    setTimeout(() => { board.classList.remove('locked'); lock = false; }, 400);
+  }
+}
+
+function tapCard(el, card) {
+  if (lock || el.classList.contains('flipped') || el.classList.contains('matched')) return;
+  audioCtx(); // sblocca l'audio su iOS al primo tocco
+  el.classList.add('flipped');
+  sndFlip();
+
+  if (!firstCard) { firstCard = el; return; }
+
+  const a = firstCard, b = el;
+  firstCard = null; lock = true;
+
+  if (a.dataset.cardId === b.dataset.cardId) {
+    setTimeout(() => {
+      a.classList.add('matched'); b.classList.add('matched');
+      sndMatch(); praise(card);
+      matchedCount++;
+      lock = false;
+      if (matchedCount === totalPairs) setTimeout(levelComplete, 1100);
+    }, 420);
+  } else {
+    // nessun suono negativo: le carte si rigirano dolcemente
+    setTimeout(() => {
+      a.classList.remove('flipped'); b.classList.remove('flipped');
+      sndUnflip();
+      lock = false;
+    }, 1300);
+  }
+}
+
+function levelComplete() {
+  const isLast = level >= maxLevel();
+  sndFanfare(); sndApplause(isLast ? 3.5 : 2.2);
+  launchConfetti(isLast ? 300 : 160);
+  if (isLast) {
+    celebrateTitle.textContent = '🏆 CAMPIONE! 🏆';
+    nextBtn.textContent = '🔄 Gioca ancora!';
+    speak(`${settings.name}, sei un campione! Hai vinto tutto il gioco! Evviva!`);
+  } else {
+    celebrateTitle.textContent = 'EVVIVA!';
+    nextBtn.textContent = 'Avanti! ➜';
+    speak(`Evviva ${settings.name}! Hai vinto! Ora ancora più carte!`);
+  }
+  celebrateEl.classList.add('show');
+}
+
+nextBtn.addEventListener('click', () => {
+  celebrateEl.classList.remove('show');
+  if (level >= maxLevel()) level = 0;       // ricomincia da 4 carte
+  else level++;                              // +1 coppia = +2 carte
+  startLevel();
+});
+
+addEventListener('resize', () => {
+  const count = board.children.length;
+  if (count) layoutBoard(count);
+});
+
+/* ============ Schermata iniziale ============ */
+function buildTitle() {
+  const name = document.getElementById('title-name');
+  const rest = document.getElementById('title-rest');
+  name.innerHTML = ''; rest.innerHTML = '';
+  const colors = ['#ffd93b', '#7dff8a', '#7dd4ff', '#ff9bd0', '#ffb46b'];
+  [...(settings.name.toUpperCase())].forEach((ch, i) => {
+    const s = document.createElement('span');
+    s.className = 'title-letter'; s.textContent = ch;
+    s.style.color = colors[i % colors.length];
+    s.style.animationDelay = (i * 0.12) + 's';
+    name.appendChild(s);
+  });
+  [...'MEMORY'].forEach((ch, i) => {
+    const s = document.createElement('span');
+    s.className = 'title-letter'; s.textContent = ch;
+    s.style.fontSize = '6.5vmin';
+    s.style.animationDelay = (i * 0.12 + 0.3) + 's';
+    rest.appendChild(s);
+  });
+}
+document.getElementById('play-btn').addEventListener('click', () => {
+  audioCtx();
+  speak(`Ciao ${settings.name}! Giochiamo!`);
+  document.getElementById('title-screen').classList.add('hidden');
+  level = 0;
+  startLevel();
+});
+
+/* ==================================================================
+   PANNELLO GENITORI
+   ================================================================== */
+const parentBtn = document.getElementById('parent-btn');
+const parentRing = document.getElementById('parent-ring');
+const panel = document.getElementById('parent-panel');
+const HOLD_MS = 2200;
+let holdTimer = null, holdStart = 0, holdRAF = null;
+
+function holdProgress() {
+  const p = Math.min(1, (Date.now() - holdStart) / HOLD_MS);
+  parentRing.style.setProperty('--p', (p * 100) + '%');
+  if (p < 1 && holdTimer) holdRAF = requestAnimationFrame(holdProgress);
+}
+parentBtn.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  holdStart = Date.now();
+  holdTimer = setTimeout(() => { holdTimer = null; parentRing.style.setProperty('--p', '0%'); openPanel(); }, HOLD_MS);
+  holdRAF = requestAnimationFrame(holdProgress);
+});
+function cancelHold() {
+  if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  if (holdRAF) cancelAnimationFrame(holdRAF);
+  parentRing.style.setProperty('--p', '0%');
+}
+parentBtn.addEventListener('pointerup', cancelHold);
+parentBtn.addEventListener('pointerleave', cancelHold);
+parentBtn.addEventListener('pointercancel', cancelHold);
+parentBtn.addEventListener('contextmenu', e => e.preventDefault());
+
+function toast(text) {
+  const t = document.getElementById('panel-toast');
+  t.textContent = text; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function openPanel() {
+  document.getElementById('set-name').value = settings.name;
+  document.getElementById('set-voice').checked = settings.voice;
+  document.getElementById('set-preview').checked = settings.preview;
+  fillVoiceSelect();
+  renderCardList();
+  panel.classList.add('show');
+}
+function fillVoiceSelect() {
+  const sel = document.getElementById('set-voiceSel');
+  sel.innerHTML = '<option value="">Automatica (la migliore disponibile)</option>';
+  for (const v of italianVoices().sort((a, b) => voiceQuality(b) - voiceQuality(a))) {
+    const o = document.createElement('option');
+    o.value = v.name; o.textContent = v.name;
+    sel.appendChild(o);
+  }
+  sel.value = settings.voiceName && [...sel.options].some(o => o.value === settings.voiceName) ? settings.voiceName : '';
+}
+document.getElementById('set-voiceSel').addEventListener('change', e => {
+  settings.voiceName = e.target.value || null;
+  pickVoice(); saveSettings();
+  speak(`Ciao ${document.getElementById('set-name').value.trim() || settings.name}! Bravo!`);
+});
+document.getElementById('test-voice').addEventListener('click', () => {
+  pickVoice();
+  speak(`Ciao ${document.getElementById('set-name').value.trim() || settings.name}! Bravissimo, hai trovato una coppia!`);
+});
+document.getElementById('close-panel').addEventListener('click', () => {
+  settings.name = document.getElementById('set-name').value.trim() || 'David';
+  settings.voice = document.getElementById('set-voice').checked;
+  settings.preview = document.getElementById('set-preview').checked;
+  saveSettings();
+  buildTitle();
+  panel.classList.remove('show');
+  toast('Salvato! ✓');
+});
+
+/* --- lista carte nel pannello --- */
+let activeRecorder = null;
+
+function getCardData(id) {
+  const def = DEFAULT_CARDS.find(c => c.id === id);
+  if (def) {
+    if (!settings.overrides[id]) settings.overrides[id] = {};
+    return { isDefault: true, def, data: settings.overrides[id] };
+  }
+  const cu = settings.custom.find(c => c.id === id);
+  return { isDefault: false, def: null, data: cu };
+}
+
+function renderCardList() {
+  const list = document.getElementById('card-list');
+  list.innerHTML = '';
+  for (const card of cardPool()) {
+    const row = document.createElement('div');
+    row.className = 'card-row';
+
+    const thumb = document.createElement('div');
+    thumb.className = 'card-thumb';
+    thumb.innerHTML = card.img ? `<img src="${card.img}" alt="">` : card.svg;
+    row.appendChild(thumb);
+
+    const nameIn = document.createElement('input');
+    nameIn.type = 'text'; nameIn.className = 'name-input'; nameIn.value = card.name;
+    nameIn.maxLength = 30;
+    nameIn.addEventListener('change', () => {
+      const { isDefault, data } = getCardData(card.id);
+      if (isDefault) data.name = nameIn.value.trim();
+      else data.name = nameIn.value.trim() || 'Foto';
+      saveSettings();
+    });
+    row.appendChild(nameIn);
+
+    const photoBtn = mkBtn('📷 Foto', 'mini-btn', () => pickPhoto(card.id));
+    row.appendChild(photoBtn);
+
+    const recBtn = mkBtn('🎤 Registra', 'mini-btn rec', function () { toggleRecord(card.id, this); });
+    row.appendChild(recBtn);
+
+    const audioUp = mkBtn('🎵 File', 'mini-btn', () => pickAudio(card.id));
+    row.appendChild(audioUp);
+
+    if (card.audio) {
+      const playBtn = mkBtn('▶︎', 'mini-btn', () => { try { new Audio(card.audio).play(); } catch (e) {} });
+      row.appendChild(playBtn);
+      const delAudio = mkBtn('✕ suono', 'mini-btn danger', () => {
+        const { data } = getCardData(card.id);
+        delete data.audio; saveSettings(); renderCardList();
+      });
+      row.appendChild(delAudio);
+    }
+
+    const { isDefault } = getCardData(card.id);
+    if (!isDefault) {
+      const delBtn = mkBtn('🗑️', 'mini-btn danger', () => {
+        settings.custom = settings.custom.filter(c => c.id !== card.id);
+        saveSettings(); renderCardList();
+      });
+      row.appendChild(delBtn);
+    } else if (settings.overrides[card.id] && settings.overrides[card.id].img) {
+      const resetImg = mkBtn('↩︎ originale', 'mini-btn', () => {
+        delete settings.overrides[card.id].img;
+        saveSettings(); renderCardList();
+      });
+      row.appendChild(resetImg);
+    }
+
+    const toggle = document.createElement('input');
+    toggle.type = 'checkbox'; toggle.className = 'row-toggle';
+    toggle.checked = card.enabled;
+    toggle.addEventListener('change', () => {
+      if (!toggle.checked && enabledCards().length <= MIN_ENABLED) {
+        toggle.checked = true;
+        toast(`Servono almeno ${MIN_ENABLED} carte accese`);
+        return;
+      }
+      const { data } = getCardData(card.id);
+      data.enabled = toggle.checked;
+      saveSettings();
+    });
+    row.appendChild(toggle);
+
+    list.appendChild(row);
+  }
+}
+function mkBtn(label, cls, fn) {
+  const b = document.createElement('button');
+  b.className = cls; b.textContent = label;
+  b.addEventListener('click', fn);
+  return b;
+}
+
+/* --- foto --- */
+function pickPhoto(cardId) {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*';
+  input.onchange = async () => {
+    const file = input.files[0];
+    if (!file) return;
+    const dataUrl = await resizeImage(file, 512);
+    if (cardId) {
+      const { data } = getCardData(cardId);
+      data.img = dataUrl;
+    } else {
+      settings.custom.push({ id: 'custom-' + Date.now(), name: 'Foto', img: dataUrl, enabled: true });
+    }
+    saveSettings(); renderCardList();
+    toast('Foto salvata! ✓');
+  };
+  input.click();
+}
+function resizeImage(file, max) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const side = Math.min(img.width, img.height);
+      const c = document.createElement('canvas');
+      c.width = c.height = Math.min(max, side);
+      const g = c.getContext('2d');
+      g.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', 0.85));
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+document.getElementById('add-card').addEventListener('click', () => pickPhoto(null));
+
+/* --- audio: registrazione --- */
+async function toggleRecord(cardId, btn) {
+  if (activeRecorder) { activeRecorder.stop(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const rec = new MediaRecorder(stream);
+    const chunks = [];
+    rec.ondataavailable = e => chunks.push(e.data);
+    rec.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      activeRecorder = null;
+      btn.classList.remove('recording'); btn.textContent = '🎤 Registra';
+      const blob = new Blob(chunks, { type: rec.mimeType || 'audio/mp4' });
+      const fr = new FileReader();
+      fr.onload = () => {
+        const { data } = getCardData(cardId);
+        data.audio = fr.result;
+        saveSettings(); renderCardList();
+        toast('Suono registrato! ✓');
+      };
+      fr.readAsDataURL(blob);
+    };
+    rec.start();
+    activeRecorder = rec;
+    btn.classList.add('recording'); btn.textContent = '⏹ Stop';
+    setTimeout(() => { if (activeRecorder === rec && rec.state === 'recording') rec.stop(); }, 8000);
+  } catch (e) {
+    toast('Microfono non disponibile');
+  }
+}
+function pickAudio(cardId) {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'audio/*';
+  input.onchange = () => {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { toast('Audio troppo grande (max 2 MB)'); return; }
+    const fr = new FileReader();
+    fr.onload = () => {
+      const { data } = getCardData(cardId);
+      data.audio = fr.result;
+      saveSettings(); renderCardList();
+      toast('Suono salvato! ✓');
+    };
+    fr.readAsDataURL(file);
+  };
+  input.click();
+}
+
+/* --- backup --- */
+document.getElementById('export-btn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(settings)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'david-memory-backup.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast('Backup esportato ✓');
+});
+document.getElementById('import-btn').addEventListener('click', () => {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.json,application/json';
+  input.onchange = () => {
+    const file = input.files[0];
+    if (!file) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      try {
+        const data = JSON.parse(fr.result);
+        if (typeof data !== 'object' || !('overrides' in data) || !('custom' in data)) throw new Error('formato');
+        settings = Object.assign({ name:'David', voice:true, preview:true, overrides:{}, custom:[] }, data);
+        saveSettings(); openPanel(); buildTitle();
+        toast('Backup importato! ✓');
+      } catch (e) { toast('File non valido'); }
+    };
+    fr.readAsText(file);
+  };
+  input.click();
+});
+document.getElementById('reset-btn').addEventListener('click', () => {
+  if (confirm('Cancellare TUTTE le foto, i suoni e le impostazioni personalizzate?')) {
+    settings = { name:'David', voice:true, preview:true, overrides:{}, custom:[] };
+    saveSettings(); openPanel(); buildTitle();
+    toast('Tutto ripristinato');
+  }
+});
+
+/* ==================================================================
+   AVVIO
+   ================================================================== */
+loadSettings().then(() => { buildTitle(); pickVoice(); });
+</script>
+</body>
+</html>
