@@ -197,6 +197,7 @@
   .has-audio { font-size:12px; color:#2e9e44; font-weight:700; }
   .row-toggle { width:22px; height:22px; accent-color:#5a3df0; flex-shrink:0; }
   .hint { font-size:12.5px; color:#888; margin-top:6px; line-height:1.45; }
+  .phrase-label { flex:1; font-size:13.5px; min-width:150px; color:#444; }
   #panel-toast {
     position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
     background:#333; color:#fff; padding:10px 20px; border-radius:20px;
@@ -265,6 +266,12 @@
         <span>Mostra le carte all'inizio del livello (aiuto memoria)</span>
         <input type="checkbox" id="set-preview">
       </div>
+    </div>
+
+    <div class="panel-section">
+      <h3>🎤 Le vostre voci</h3>
+      <p class="hint">Registra con la <b>tua voce</b> le frasi del gioco: David sentirà mamma e papà! Tocca 🎤, parla, poi tocca ⏹ Stop. Le frasi non registrate vengono dette dalla voce automatica. Puoi anche registrare un vero applauso!</p>
+      <div id="phrase-list"></div>
     </div>
 
     <div class="panel-section">
@@ -462,7 +469,7 @@ const CARD_BACK_SVG = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/
    STATO E SALVATAGGIO (IndexedDB)
    ================================================================== */
 const PAIRS_START = 2, PAIRS_MAX = 6, MIN_ENABLED = 6;
-let settings = { name:'David', voice:true, preview:true, voiceName:null, overrides:{}, custom:[] };
+let settings = { name:'David', voice:true, preview:true, voiceName:null, overrides:{}, custom:[], phrases:{} };
 /* overrides: { [id]: {name?, img?, audio?, enabled?} }
    custom:    [ {id, name, img, audio?, enabled} ] */
 
@@ -542,18 +549,21 @@ function sndFanfare() {
   const notes = [523, 659, 784, 1047, 784, 1047, 1319];
   notes.forEach((f, i) => { tone(f, i * 0.14, 0.3, 'triangle', 0.2); tone(f / 2, i * 0.14, 0.3, 'sine', 0.1); });
 }
-function sndApplause(dur = 2.2) {
+function sndApplause(dur = 2.5) {
   const ctx = audioCtx();
-  for (let i = 0; i < dur * 28; i++) {
+  const comp = ctx.createDynamicsCompressor();
+  const master = ctx.createGain(); master.gain.value = 1.2;
+  comp.connect(master); master.connect(ctx.destination);
+  for (let i = 0; i < dur * 55; i++) {
     const t = Math.random() * dur;
-    const buf = ctx.createBuffer(1, 600, ctx.sampleRate);
+    const buf = ctx.createBuffer(1, 700, ctx.sampleRate);
     const d = buf.getChannelData(0);
-    for (let j = 0; j < d.length; j++) d[j] = (Math.random() * 2 - 1) * Math.exp(-j / 150);
+    for (let j = 0; j < d.length; j++) d[j] = (Math.random() * 2 - 1) * Math.exp(-j / 130);
     const src = ctx.createBufferSource(); src.buffer = buf;
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass';
-    bp.frequency.value = 1200 + Math.random() * 2500; bp.Q.value = 1;
-    const g = ctx.createGain(); g.gain.value = 0.05 + Math.random() * 0.06;
-    src.connect(bp).connect(g).connect(ctx.destination);
+    bp.frequency.value = 900 + Math.random() * 3000; bp.Q.value = 0.9;
+    const g = ctx.createGain(); g.gain.value = 0.07 + Math.random() * 0.09;
+    src.connect(bp); bp.connect(g); g.connect(comp);
     src.start(ctx.currentTime + t);
   }
 }
@@ -601,15 +611,24 @@ function playCardAudio(card) {
   }
   return false;
 }
-const PRAISES = ['Bravo', 'Bravissimo', 'Fantastico', 'Che bravo', 'Super', 'Grande'];
+const PRAISES = [
+  { key:'bravo',      text:'Bravo' },
+  { key:'bravissimo', text:'Bravissimo' },
+  { key:'fantastico', text:'Fantastico' },
+  { key:'superbravo', text:'Super' }
+];
+/* Riproduce una frase registrata dai genitori; false se non esiste */
+function playPhrase(key) {
+  const rec = settings.phrases && settings.phrases[key];
+  if (!rec) return false;
+  try { new Audio(rec).play(); return true; } catch (e) { return false; }
+}
 function praise(card) {
   const p = PRAISES[Math.floor(Math.random() * PRAISES.length)];
-  const withName = Math.random() < 0.5 ? `${p} ${settings.name}!` : `${p}!`;
-  if (playCardAudio(card)) {
-    setTimeout(() => speak(withName), 900);
-  } else {
-    speak(`${withName} ${card.name}!`);
-  }
+  const withName = Math.random() < 0.5 ? `${p.text} ${settings.name}!` : `${p.text}!`;
+  const cheer = () => { if (!playPhrase(p.key)) speak(`${withName} ${card.name}!`); };
+  if (playCardAudio(card)) setTimeout(cheer, 900);
+  else cheer();
 }
 
 /* ==================================================================
@@ -737,7 +756,7 @@ function startLevel() {
 
   if (settings.preview) {
     msg.textContent = '👀 Guarda bene!';
-    speak('Guarda bene!');
+    if (!playPhrase('guarda')) speak('Guarda bene!');
     setTimeout(() => {
       board.querySelectorAll('.card').forEach(c => c.classList.add('flipped'));
     }, 350);
@@ -783,16 +802,17 @@ function tapCard(el, card) {
 
 function levelComplete() {
   const isLast = level >= maxLevel();
-  sndFanfare(); sndApplause(isLast ? 3.5 : 2.2);
+  sndFanfare();
+  if (!playPhrase('applauso')) sndApplause(isLast ? 4 : 2.8);
   launchConfetti(isLast ? 300 : 160);
   if (isLast) {
     celebrateTitle.textContent = '🏆 CAMPIONE! 🏆';
     nextBtn.textContent = '🔄 Gioca ancora!';
-    speak(`${settings.name}, sei un campione! Hai vinto tutto il gioco! Evviva!`);
+    setTimeout(() => { if (!playPhrase('campione')) speak(`${settings.name}, sei un campione! Hai vinto tutto il gioco! Evviva!`); }, 800);
   } else {
     celebrateTitle.textContent = 'EVVIVA!';
     nextBtn.textContent = 'Avanti! ➜';
-    speak(`Evviva ${settings.name}! Hai vinto! Ora ancora più carte!`);
+    setTimeout(() => { if (!playPhrase('evviva')) speak(`Evviva ${settings.name}! Hai vinto! Ora ancora più carte!`); }, 800);
   }
   celebrateEl.classList.add('show');
 }
@@ -832,7 +852,7 @@ function buildTitle() {
 }
 document.getElementById('play-btn').addEventListener('click', () => {
   audioCtx();
-  speak(`Ciao ${settings.name}! Giochiamo!`);
+  if (!playPhrase('ciao')) speak(`Ciao ${settings.name}! Giochiamo!`);
   document.getElementById('title-screen').classList.add('hidden');
   level = 0;
   startLevel();
@@ -879,6 +899,7 @@ function openPanel() {
   document.getElementById('set-voice').checked = settings.voice;
   document.getElementById('set-preview').checked = settings.preview;
   fillVoiceSelect();
+  renderPhraseList();
   renderCardList();
   panel.classList.add('show');
 }
@@ -1050,8 +1071,8 @@ function resizeImage(file, max) {
 }
 document.getElementById('add-card').addEventListener('click', () => pickPhoto(null));
 
-/* --- audio: registrazione --- */
-async function toggleRecord(cardId, btn) {
+/* --- audio: registrazione (generica: carte e frasi) --- */
+async function recordToggle(btn, onDone) {
   if (activeRecorder) { activeRecorder.stop(); return; }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1061,23 +1082,70 @@ async function toggleRecord(cardId, btn) {
     rec.onstop = () => {
       stream.getTracks().forEach(t => t.stop());
       activeRecorder = null;
-      btn.classList.remove('recording'); btn.textContent = '🎤 Registra';
+      btn.classList.remove('recording');
+      btn.textContent = btn.dataset.label || '🎤 Registra';
       const blob = new Blob(chunks, { type: rec.mimeType || 'audio/mp4' });
       const fr = new FileReader();
-      fr.onload = () => {
-        const { data } = getCardData(cardId);
-        data.audio = fr.result;
-        saveSettings(); renderCardList();
-        toast('Suono registrato! ✓');
-      };
+      fr.onload = () => onDone(fr.result);
       fr.readAsDataURL(blob);
     };
     rec.start();
     activeRecorder = rec;
+    btn.dataset.label = btn.textContent;
     btn.classList.add('recording'); btn.textContent = '⏹ Stop';
-    setTimeout(() => { if (activeRecorder === rec && rec.state === 'recording') rec.stop(); }, 8000);
+    setTimeout(() => { if (activeRecorder === rec && rec.state === 'recording') rec.stop(); }, 10000);
   } catch (e) {
     toast('Microfono non disponibile');
+  }
+}
+function toggleRecord(cardId, btn) {
+  recordToggle(btn, dataUrl => {
+    const { data } = getCardData(cardId);
+    data.audio = dataUrl;
+    saveSettings(); renderCardList();
+    toast('Suono registrato! ✓');
+  });
+}
+
+/* --- frasi del gioco registrabili --- */
+const GAME_PHRASES = [
+  { key:'ciao',       label:'«Ciao! Giochiamo!» — all’avvio' },
+  { key:'guarda',     label:'«Guarda bene!» — inizio livello' },
+  { key:'bravo',      label:'«Bravo!» — coppia trovata' },
+  { key:'bravissimo', label:'«Bravissimo!» — coppia trovata' },
+  { key:'fantastico', label:'«Fantastico!» — coppia trovata' },
+  { key:'superbravo', label:'«Super!» — coppia trovata' },
+  { key:'evviva',     label:'«Evviva! Hai vinto!» — fine livello' },
+  { key:'campione',   label:'«Sei un campione!» — vittoria finale' },
+  { key:'applauso',   label:'👏 Applauso — fine livello' }
+];
+function renderPhraseList() {
+  const list = document.getElementById('phrase-list');
+  list.innerHTML = '';
+  for (const ph of GAME_PHRASES) {
+    const row = document.createElement('div');
+    row.className = 'card-row';
+    const lab = document.createElement('span');
+    lab.className = 'phrase-label'; lab.textContent = ph.label;
+    row.appendChild(lab);
+    const has = settings.phrases && settings.phrases[ph.key];
+    const recBtn = mkBtn('🎤 Registra', 'mini-btn rec', function () {
+      recordToggle(this, dataUrl => {
+        if (!settings.phrases) settings.phrases = {};
+        settings.phrases[ph.key] = dataUrl;
+        saveSettings(); renderPhraseList();
+        toast('Voce registrata! ✓');
+      });
+    });
+    row.appendChild(recBtn);
+    if (has) {
+      row.appendChild(mkBtn('▶︎', 'mini-btn', () => { try { new Audio(settings.phrases[ph.key]).play(); } catch (e) {} }));
+      row.appendChild(mkBtn('✕', 'mini-btn danger', () => {
+        delete settings.phrases[ph.key];
+        saveSettings(); renderPhraseList();
+      }));
+    }
+    list.appendChild(row);
   }
 }
 function pickAudio(cardId) {
@@ -1120,7 +1188,7 @@ document.getElementById('import-btn').addEventListener('click', () => {
       try {
         const data = JSON.parse(fr.result);
         if (typeof data !== 'object' || !('overrides' in data) || !('custom' in data)) throw new Error('formato');
-        settings = Object.assign({ name:'David', voice:true, preview:true, overrides:{}, custom:[] }, data);
+        settings = Object.assign({ name:'David', voice:true, preview:true, voiceName:null, overrides:{}, custom:[], phrases:{} }, data);
         saveSettings(); openPanel(); buildTitle();
         toast('Backup importato! ✓');
       } catch (e) { toast('File non valido'); }
@@ -1131,7 +1199,7 @@ document.getElementById('import-btn').addEventListener('click', () => {
 });
 document.getElementById('reset-btn').addEventListener('click', () => {
   if (confirm('Cancellare TUTTE le foto, i suoni e le impostazioni personalizzate?')) {
-    settings = { name:'David', voice:true, preview:true, overrides:{}, custom:[] };
+    settings = { name:'David', voice:true, preview:true, voiceName:null, overrides:{}, custom:[], phrases:{} };
     saveSettings(); openPanel(); buildTitle();
     toast('Tutto ripristinato');
   }
