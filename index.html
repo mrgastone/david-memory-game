@@ -565,6 +565,7 @@ function italianVoices() {
 function voiceQuality(v) {
   const n = v.name.toLowerCase();
   let s = 0;
+  if (v.default) s += 8;   // la voce predefinita scelta nelle impostazioni del dispositivo vince
   if (n.includes('siri')) s += 6;
   if (n.includes('natural') || n.includes('naturale')) s += 5;
   if (n.includes('premium')) s += 5;
@@ -883,13 +884,21 @@ function openPanel() {
 }
 function fillVoiceSelect() {
   const sel = document.getElementById('set-voiceSel');
-  sel.innerHTML = '<option value="">Automatica (la migliore disponibile)</option>';
+  pickVoice();
+  const current = itVoice ? itVoice.name : 'nessuna trovata';
+  sel.innerHTML = `<option value="">Automatica (ora: ${current})</option>`;
   for (const v of italianVoices().sort((a, b) => voiceQuality(b) - voiceQuality(a))) {
     const o = document.createElement('option');
-    o.value = v.name; o.textContent = v.name;
+    o.value = v.name;
+    o.textContent = v.name + (v.default ? ' ⭐ (predefinita)' : '');
     sel.appendChild(o);
   }
   sel.value = settings.voiceName && [...sel.options].some(o => o.value === settings.voiceName) ? settings.voiceName : '';
+}
+if ('speechSynthesis' in window) {
+  speechSynthesis.addEventListener('voiceschanged', () => {
+    if (panel.classList.contains('show')) fillVoiceSelect();
+  });
 }
 document.getElementById('set-voiceSel').addEventListener('change', e => {
   settings.voiceName = e.target.value || null;
