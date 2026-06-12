@@ -852,7 +852,6 @@ function buildTitle() {
 }
 document.getElementById('play-btn').addEventListener('click', () => {
   audioCtx();
-  if (!playPhrase('ciao')) speak(`Ciao ${settings.name}! Giochiamo!`);
   document.getElementById('title-screen').classList.add('hidden');
   level = 0;
   startLevel();
@@ -1109,7 +1108,6 @@ function toggleRecord(cardId, btn) {
 
 /* --- frasi del gioco registrabili --- */
 const GAME_PHRASES = [
-  { key:'ciao',       label:'«Ciao! Giochiamo!» — all’avvio' },
   { key:'guarda',     label:'«Guarda bene!» — inizio livello' },
   { key:'bravo',      label:'«Bravo!» — coppia trovata' },
   { key:'bravissimo', label:'«Bravissimo!» — coppia trovata' },
