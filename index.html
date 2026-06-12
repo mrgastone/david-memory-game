@@ -785,10 +785,15 @@ function tapCard(el, card) {
   if (a.dataset.cardId === b.dataset.cardId) {
     setTimeout(() => {
       a.classList.add('matched'); b.classList.add('matched');
-      sndMatch(); praise(card);
+      sndMatch();
       matchedCount++;
       lock = false;
-      if (matchedCount === totalPairs) setTimeout(levelComplete, 1100);
+      if (matchedCount === totalPairs) {
+        // niente complimento sull'ultima coppia: si sovrapporrebbe alla voce di vittoria
+        setTimeout(levelComplete, 900);
+      } else {
+        praise(card);
+      }
     }, 420);
   } else {
     // nessun suono negativo: le carte si rigirano dolcemente
